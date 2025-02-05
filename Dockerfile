@@ -6,25 +6,28 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-
-# Ensure working C compile setup (not installed by default in arm64 images)
 RUN apt update && apt install build-essential -y
-
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
-
 COPY . .
 RUN cargo build --release --bin atuin
 
 FROM debian:bookworm-20250113-slim AS runtime
 
-RUN useradd -c 'atuin user' atuin && mkdir /config && chown atuin:atuin /config
-# Install ca-certificates for webhooks to work
-RUN apt update && apt install ca-certificates -y && rm -rf /var/lib/apt/lists/*
-WORKDIR app
+# Create user with home directory and config directory
+RUN useradd -m -c 'atuin user' atuin && \
+    mkdir /config && \
+    chown atuin:atuin /config
 
+# Install runtime dependencies
+RUN apt update && \
+    apt install ca-certificates -y && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
 USER atuin
 
+# Set environment variables
 ENV TZ=Etc/UTC
 ENV RUST_LOG=atuin::api=info
 ENV ATUIN_CONFIG_DIR=/config
